@@ -47,9 +47,11 @@ class Robot {
   // motor control methods
   void set_motor_l(int speed){
     motor_l->setSpeed(speed);
+    motor_l->run(FORWARD);
   }
   void set_motor_r(int speed){
     motor_r->setSpeed(speed);
+    motor_r->run(FORWARD);
   }
 
   // movement methods
@@ -65,32 +67,43 @@ class Robot {
     set_motor_l(STRAIGHT_SPEED);
     set_motor_r(TURN_VALUE);
   }
+  void brake(){
+    motor_l->run(RELEASE);
+    motor_r->run(RELEASE);
+  }
   
 };
 
 // create Robot object
 Robot lineFollower;
 
-void setup() {
+void setup() { 
+  // start motor driver
+  AFMS.begin(); // THIS PART DOES NOT CURRENTLY WORK
   // initialize Serial Output
   Serial.begin(9600);
 }
 
 // the loop function runs over and over again forever
 void loop() {
-  // if left sensor is on line, turn left
-  if(lineFollower.on_tape_l()){
+  // if only left sensor is on line, turn left
+  if(lineFollower.on_tape_l() && !lineFollower.on_tape_r()){
     lineFollower.turn_l();
   }
 
-  // if right sensor is on line, turn right
-  if(lineFollower.on_tape_r()){
+  // if only right sensor is on line, turn right
+  if(lineFollower.on_tape_r() && !lineFollower.on_tape_l()){
     lineFollower.turn_r();
   }
 
   // if no sensors are on line, go straight
   if(!lineFollower.on_tape_l() && !lineFollower.on_tape_r()){
     lineFollower.go_straight();
+  }
+
+  // if both sensors are on line, stop
+  if(lineFollower.on_tape_l() && lineFollower.on_tape_r()){
+    lineFollower.brake();
   }
 
   Serial.print("Left IR: " + String(lineFollower.read_ir_l()) + " Right IR: " + String(lineFollower.read_ir_r()));

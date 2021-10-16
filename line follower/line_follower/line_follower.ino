@@ -8,12 +8,11 @@ Code to control the PIE line follower robot with two IR sensors
 #include "utility/Adafruit_MS_PWMServoDriver.h"
 
 class Robot {
+  public:
   // adjustable IR sensor threshold value (< is on floor)
-  const int IR_THRESHOLD = 750;
-  // motor go-straight speed
-  const int STRAIGHT_SPEED = 30;
-  // speed of the slow wheel during a turn
-  const int TURN_VALUE = 2;
+  int IR_THRESHOLD = 500;
+  int STRAIGHT_SPEED;
+  int TURN_VALUE;
   
   // declare sensor pins
   const int S_L = A0;
@@ -28,14 +27,19 @@ class Robot {
   Adafruit_DCMotor *motor_l = AFMS.getMotor(M_L_PIN);
   Adafruit_DCMotor *motor_r = AFMS.getMotor(M_R_PIN);
 
-  public:
+  Robot(int straight_speed, int turn_value){
+    // motor go-straight speed
+    this->STRAIGHT_SPEED = straight_speed;
+    // speed of the slow wheel during a turn
+    this->TURN_VALUE = turn_value;
+  }
 
   // IR sensor reading methods
   int read_ir_l(){
     return analogRead(S_L);
   }
   int read_ir_r(){
-    return analogRead(S_L);
+    return analogRead(S_R);
   }
   bool on_tape_l(){
     return read_ir_l() > IR_THRESHOLD;
@@ -46,10 +50,22 @@ class Robot {
 
   // motor control methods
   void set_motor_l(int speed){
-    motor_l->setSpeed(speed);
+    if(speed < 0){
+      motor_l->setSpeed(-speed);
+      motor_l->run(BACKWARD);
+    } else {
+      motor_l->setSpeed(speed);
+      motor_l->run(FORWARD);
+    }
   }
   void set_motor_r(int speed){
-    motor_r->setSpeed(speed);
+    if(speed < 0){
+      motor_r->setSpeed(-speed);
+      motor_r->run(BACKWARD);
+    } else {
+      motor_r->setSpeed(speed);
+      motor_r->run(FORWARD);
+    }
   }
 
   // movement methods
@@ -65,14 +81,19 @@ class Robot {
     set_motor_l(STRAIGHT_SPEED);
     set_motor_r(TURN_VALUE);
   }
+  void stop(){
+    motor_r->run(RELEASE);
+    motor_l->run(RELEASE);
+  }
   
 };
 
 // create Robot object
-Robot lineFollower;
+Robot lineFollower = Robot(50, -30);
 
 void setup() {
   // initialize Serial Output
+  lineFollower.AFMS.begin(); // start motor driver
   Serial.begin(9600);
 }
 
@@ -93,5 +114,35 @@ void loop() {
     lineFollower.go_straight();
   }
 
-  Serial.print("Left IR: " + String(lineFollower.read_ir_l()) + " Right IR: " + String(lineFollower.read_ir_r()));
+  // if both sensors are on line, stop
+  if(lineFollower.on_tape_l() && lineFollower.on_tape_r()){
+    lineFollower.stop();
+  }
+
+
+  
+//  debug
+  Serial.print(lineFollower.read_ir_l());
+  Serial.print(",");
+  Serial.print(lineFollower.read_ir_r());
+  Serial.print(",");
+  Serial.print(lineFollower.on_tape_l());
+  Serial.print(",");
+  Serial.println(lineFollower.on_tape_r());
+
+  // read serial inputs for straight speed and turn speed
+  if(Serial.available()){
+    int straight_speed = Serial.readStringUntil(',').toInt();
+    int turn_speed = Serial.readStringUntil('\n').toInt();
+ 
+    lineFollower.STRAIGHT_SPEED = straight_speed;
+    lineFollower.TURN_VALUE = turn_speed;
+
+    Serial.print("Straight: ");
+    Serial.print(lineFollower.STRAIGHT_SPEED);
+    Serial.print(" Turn: ");
+    Serial.println(lineFollower.TURN_VALUE);
+  }
+  
+  delay(10); // delay 50 ms
 }

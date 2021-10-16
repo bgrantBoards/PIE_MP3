@@ -1,4 +1,4 @@
-/* Motor_Test_1.ino
+/* Motor_AND_Sensor_Test_1.ino
  *  Basic code to test out the two motors of our line-following robot
  *  Myles Lack-Zell
  *  9/30/21
@@ -12,10 +12,13 @@
 // define variables
 int leftMotor=2; // port number for left motor
 int rightMotor=1; // port number for right motor
-int initialSpeed=25; // set both left and right initial speeds to this value
+int initialSpeed=30; // set both left and right initial speeds to this value
+int turn = initialSpeed-2; // turn amount
 
-int sensorPin = A0;    // select the input pin for the potentiometer
-int sensorValue = 0;  // variable to store the value coming from the sensor
+int sensorPinL = A0;    // select the input pin for the left sensor
+int sensorPinR = A2;    // select the input pin for the right
+int sensorValueL = 0;  // variable to store the value coming from the left sensor
+int sensorValueR = 0;  // variable to store the value coming from the right sensor
 
 // initialize motor shield
 Adafruit_MotorShield AFMS = Adafruit_MotorShield(); // create Adafruit_MotorShield object
@@ -34,25 +37,48 @@ void setup() {
 
 void loop() {
   // read the value from the sensor:
-  sensorValue = analogRead(sensorPin);
-  Serial.print(sensorValue);
+  sensorValueL= analogRead(sensorPinL);
+  Serial.print(sensorValueL);
   Serial.print("\n");
-  bool onTape = sensorValue > 750;
-  Serial.print(onTape);
+  bool onTapeL = sensorValueL > 750;
+  Serial.print(onTapeL);
+  Serial.print("\n");
+  sensorValueR = analogRead(sensorPinR);
+  Serial.print(sensorValueR);
+  Serial.print("\n");
+  bool onTapeR = sensorValueR > 750;
+  Serial.print(onTapeR);
   Serial.print("\n");
 
-  // turn right at slow speed for 1 [s]
-  if (onTape == 1) {
-      myMotorL->setSpeed(initialSpeed);
-      myMotorR->setSpeed(initialSpeed-10);
+  // if left sensor on tape turn left
+  if (onTapeL == 1 and onTapeR == 0) {
+      myMotorL->setSpeed(initialSpeed-turn);
+      myMotorR->setSpeed(initialSpeed);
       myMotorL->run(FORWARD);
       myMotorR->run(FORWARD);
   }
+
+  // if right sensor on tape turn right
+  else if (onTapeR == 1 and onTapeL == 0) {
+      myMotorL->setSpeed(initialSpeed);
+      myMotorR->setSpeed(initialSpeed-turn);
+      myMotorL->run(FORWARD);
+      myMotorR->run(FORWARD);
+  }
+  
+  // if both sensors on tape stop robot 
+  else if (onTapeL == 1 and onTapeR == 1) {
+      myMotorL->run(RELEASE);
+      myMotorR->run(RELEASE);
+  }
+
+  // if not on tape, continue
   else {
       myMotorL->setSpeed(initialSpeed);
       myMotorR->setSpeed(initialSpeed);
       myMotorL->run(FORWARD);
       myMotorR->run(FORWARD);
   }
-  delay(100);
+      
+  delay(25); // wait 50 [ms] before checking again
 }

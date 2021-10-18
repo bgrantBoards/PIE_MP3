@@ -9,31 +9,31 @@ Code to control the PIE line follower robot with two IR sensors
 
 class Robot {
   public:
-  // adjustable IR sensor threshold value (< is on floor)
-  int IR_THRESHOLD = 500;
-  int STRAIGHT_SPEED;
-  int TURN_VALUE;
+
+  // Robot behavior parameters
+  int IR_THRESHOLD = 500;  // IR sensor threshold value (< is on floor)
+  int STRAIGHT_SPEED = 30; // speed of both wheels while robot is travelling straight
+  int TURN_VALUE = -30;    // speed of the slow wheel during a turn
+
+  // Arduino pins
+  const int S_L = A0;      // Left IR sensor pin
+  const int S_R = A2;      // Right IR sensor pin
+  const int M_L_PIN = 2;   // Left DC motor pin
+  const int M_R_PIN = 1;   // Right DC motor pin
   
-  // declare sensor pins
-  const int S_L = A0;
-  const int S_R = A2;
-  // declare motor pins
-  const int M_L_PIN = 2;
-  const int M_R_PIN = 1;
+  // Adafruit Motor shield object
+  Adafruit_MotorShield AFMS = Adafruit_MotorShield();
   
-  // initialize motor shield
-  Adafruit_MotorShield AFMS = Adafruit_MotorShield(); // create Adafruit_MotorShield object
-  // create motor objects
+  // DC motor objects
   Adafruit_DCMotor *motor_l = AFMS.getMotor(M_L_PIN);
   Adafruit_DCMotor *motor_r = AFMS.getMotor(M_R_PIN);
 
-  Robot(int straight_speed, int turn_value){
-    // motor go-straight speed
-    this->STRAIGHT_SPEED = straight_speed;
-    // speed of the slow wheel during a turn
-    this->TURN_VALUE = turn_value;
-  }
+  // motor speed variables (for logging only)
+  int speed_m_l = 0;
+  int speed_m_r = 0;
 
+  public:
+  
   // IR sensor reading methods
   int read_ir_l(){
     return analogRead(S_L);
@@ -51,24 +51,46 @@ class Robot {
   // motor control methods
   void set_motor_l(int speed){
     if(speed < 0){
+      // set negative speed
       motor_l->setSpeed(-speed);
       motor_l->run(BACKWARD);
+      
+      speed_m_l = speed; // for speed logging
     } else {
+      // set positive speed
       motor_l->setSpeed(speed);
       motor_l->run(FORWARD);
+      
+      speed_m_l = speed; // for speed logging
+    }
+    
+    // for 0 speed
+    if(!speed){
+      motor_l->run(RELEASE);
     }
   }
   void set_motor_r(int speed){
     if(speed < 0){
+      // set negative speed
       motor_r->setSpeed(-speed);
       motor_r->run(BACKWARD);
+      
+      speed_m_r = speed; // for speed logging
     } else {
+      // set positive speed
       motor_r->setSpeed(speed);
       motor_r->run(FORWARD);
+      
+      speed_m_r = speed; // for speed logging
+    }
+
+    // for 0 speed
+    if(!speed){
+      motor_l->run(RELEASE);
     }
   }
 
-  // movement methods
+  // Robot behavior methods
   void go_straight(){
     set_motor_l(STRAIGHT_SPEED);
     set_motor_r(STRAIGHT_SPEED);
@@ -81,15 +103,65 @@ class Robot {
     set_motor_l(STRAIGHT_SPEED);
     set_motor_r(TURN_VALUE);
   }
-  void stop(){
-    motor_r->run(RELEASE);
-    motor_l->run(RELEASE);
+  void stop_motors(){
+    set_motor_l(0);
+    set_motor_r(0);
   }
-  
+
+  // serial input method
+  void handle_input(){
+    // serial input format: <straightspeed>,<turnspeed>,<threshold>
+    if(Serial.available()){
+      int straight_speed = Serial.readStringUntil(',').toInt();
+      int turn_speed = Serial.readStringUntil(',').toInt();
+      int treshold = Serial.readStringUntil('\n').toInt();
+   
+      STRAIGHT_SPEED = straight_speed;
+      TURN_VALUE = turn_speed;
+      IR_THRESHOLD = treshold;
+    }
+  }
+
+  // data logging method
+  void log_state(){
+    Serial.print(read_ir_l());
+    Serial.print(",");
+    Serial.print(read_ir_r());
+    Serial.print(",");
+    
+    Serial.print(on_tape_l());
+    Serial.print(",");
+    Serial.print(on_tape_r());
+    Serial.print(",");
+    
+    Serial.print(speed_m_l);
+    Serial.print(",");
+    Serial.println(speed_m_r);
+  }
+
+  // method for switching between behavior states based on sensor data
+  void handle_behavior(){
+    // if only left sensor is on line, turn left
+    if(on_tape_l() && !on_tape_r()){
+      turn_l();
+    }
+    // if only right sensor is on line, turn right
+    if(on_tape_r() && !on_tape_l()){
+      turn_r();
+    }
+    // if no sensors are on line, go straight
+    if(!on_tape_l() && !on_tape_r()){
+      go_straight();
+    }
+    // if both sensors are on line, stop
+    if(on_tape_l() && on_tape_r()){
+      stop_motors();
+    }
+  }
 };
 
 // create Robot object
-Robot lineFollower = Robot(50, -30);
+Robot lineFollower = Robot();
 
 void setup() {
   // initialize Serial Output
@@ -97,52 +169,15 @@ void setup() {
   Serial.begin(9600);
 }
 
-// the loop function runs over and over again forever
 void loop() {
-  // if left sensor is on line, turn left
-  if(lineFollower.on_tape_l()){
-    lineFollower.turn_l();
-  }
+  // switch behavior states according to sensor input
+  lineFollower.handle_behavior();
 
-  // if right sensor is on line, turn right
-  if(lineFollower.on_tape_r()){
-    lineFollower.turn_r();
-  }
+  // read serial inputs for straight speed and turn speed [format: <straightspeed>,<turnspeed>,<threshold>]
+  lineFollower.handle_input();
 
-  // if no sensors are on line, go straight
-  if(!lineFollower.on_tape_l() && !lineFollower.on_tape_r()){
-    lineFollower.go_straight();
-  }
+  // log sensor and motor speed data to serial
+  lineFollower.log_state();
 
-  // if both sensors are on line, stop
-  if(lineFollower.on_tape_l() && lineFollower.on_tape_r()){
-    lineFollower.stop();
-  }
-
-
-  
-//  debug
-  Serial.print(lineFollower.read_ir_l());
-  Serial.print(",");
-  Serial.print(lineFollower.read_ir_r());
-  Serial.print(",");
-  Serial.print(lineFollower.on_tape_l());
-  Serial.print(",");
-  Serial.println(lineFollower.on_tape_r());
-
-  // read serial inputs for straight speed and turn speed
-  if(Serial.available()){
-    int straight_speed = Serial.readStringUntil(',').toInt();
-    int turn_speed = Serial.readStringUntil('\n').toInt();
- 
-    lineFollower.STRAIGHT_SPEED = straight_speed;
-    lineFollower.TURN_VALUE = turn_speed;
-
-    Serial.print("Straight: ");
-    Serial.print(lineFollower.STRAIGHT_SPEED);
-    Serial.print(" Turn: ");
-    Serial.println(lineFollower.TURN_VALUE);
-  }
-  
-  delay(10); // delay 50 ms
+  delay(5); // delay in ms
 }
